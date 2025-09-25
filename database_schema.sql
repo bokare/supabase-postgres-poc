@@ -68,14 +68,19 @@ BEGIN
     RETURN result;
   END IF;
 
-  -- Get the latest event
+  -- Get the latest event with FOR UPDATE to prevent race conditions
   SELECT * INTO latest_event
   FROM simulation_events
   ORDER BY timestamp DESC
-  LIMIT 1;
+  LIMIT 1
+  FOR UPDATE;
 
-  -- Validate event sequence
+  -- Validate event sequence with row-level locking to prevent race conditions
   IF latest_event.event_id IS NOT NULL THEN
+    -- Debug: Log the validation check
+    RAISE NOTICE 'Validating event: new_type=%, latest_type=%, latest_time=%', 
+      p_event_type, latest_event.event_type, latest_event.timestamp;
+    
     -- Check if the new event type is valid based on the previous event
     IF latest_event.event_type = p_event_type THEN
       -- Same event type as the latest event - this is invalid
@@ -91,11 +96,22 @@ BEGIN
       );
       RETURN result;
     END IF;
+  ELSE
+    RAISE NOTICE 'No previous events found, allowing new event: %', p_event_type;
   END IF;
 
   -- Insert the new event
   INSERT INTO simulation_events (event_type, user_id)
   VALUES (p_event_type, p_user_id);
+  
+  -- Debug: Log successful insertion
+  RAISE NOTICE 'Event inserted successfully: type=%, user=%, time=%', 
+    p_event_type, p_user_id, NOW();
+  
+  -- Get the inserted event for response
+  SELECT * INTO latest_event
+  FROM simulation_events
+  WHERE event_id = (SELECT event_id FROM simulation_events ORDER BY timestamp DESC LIMIT 1);
 
   -- Return success response
   result := json_build_object(
