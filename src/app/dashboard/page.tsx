@@ -48,6 +48,11 @@ export default function DashboardPage() {
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
     null
   );
+  const [testResult, setTestResult] = useState<{
+    type: "function" | "direct";
+    status: "testing" | "success" | "error";
+    message: string;
+  } | null>(null);
 
   // Function to refresh simulation data
   const refreshSimulationData = useCallback(async () => {
@@ -321,60 +326,220 @@ export default function DashboardPage() {
               </div>
 
               {/* Debug buttons */}
-              <div className="flex space-x-2">
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-gray-800/50 p-6 backdrop-blur-sm shadow-xl border border-gray-700/50 mt-6">
+            <div className="flex justify-between items-start">
+              <div>
                 <button
                   onClick={refreshSimulationData}
-                  className="px-3 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors"
+                  className="px-3 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors self-start"
                 >
-                  Refresh
+                  Refresh Data
                 </button>
-                <button
-                  onClick={async () => {
-                    // Test using the validation function to see if real-time works
-                    const { data: result, error } = await supabase.rpc(
-                      "insert_simulation_event",
-                      {
-                        p_event_type: "simulation_started",
-                        p_user_id: currentUser,
-                      }
-                    );
-                    console.log("Function test result:", { result, error });
-                    if (result && result.success) {
-                      console.log("Event inserted successfully via function");
-                    } else {
-                      console.log(
-                        "Function validation prevented duplicate:",
-                        result?.error
-                      );
-                    }
-                  }}
-                  className="px-3 py-1 text-xs bg-blue-700 text-blue-300 rounded hover:bg-blue-600 transition-colors"
-                >
-                  Test RT (Function)
-                </button>
+              </div>
+              <div className="flex flex-col gap-2">
+                <h4 className="text-sm font-medium text-gray-300 mb-2">
+                  Security Testing Tools
+                </h4>
 
-                <button
-                  onClick={async () => {
-                    // Test direct insert to bypass validation (for testing purposes)
-                    const { data, error } = await supabase
-                      .from("simulation_events")
-                      .insert({
-                        event_type: "simulation_started",
-                        user_id: currentUser,
+                {/* Function Test Button */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      setTestResult({
+                        type: "function",
+                        status: "testing",
+                        message: "Testing function validation...",
                       });
-                    console.log("Direct insert test:", { data, error });
-                    if (error) {
-                      console.log("Direct insert failed:", error.message);
-                    } else {
-                      console.log(
-                        "Direct insert succeeded - this bypasses validation!"
+
+                      const { data: result, error } = await supabase.rpc(
+                        "insert_simulation_event",
+                        {
+                          p_event_type: "simulation_started",
+                          p_user_id: currentUser,
+                        }
                       );
-                    }
-                  }}
-                  className="px-3 py-1 text-xs bg-red-700 text-red-300 rounded hover:bg-red-600 transition-colors"
-                >
-                  Test RT (Direct)
-                </button>
+
+                      console.log("Function test result:", { result, error });
+
+                      if (result && result.success) {
+                        console.log(
+                          "Event inserted successfully via function",
+                          result
+                        );
+                        setTestResult({
+                          type: "function",
+                          status: "success",
+                          message:
+                            "✅ Function validation passed - Event inserted successfully",
+                        });
+                      } else {
+                        console.log(
+                          "Function validation prevented duplicate:",
+                          result?.error
+                        );
+                        setTestResult({
+                          type: "function",
+                          status: "error",
+                          message: `❌ Function validation blocked: ${
+                            result?.error || "Unknown error"
+                          }`,
+                        });
+                      }
+
+                      // Clear result after 5 seconds
+                      setTimeout(() => setTestResult(null), 5000);
+                    }}
+                    className="px-4 py-3 text-sm font-medium text-blue-100 bg-gradient-to-r from-blue-600/80 to-blue-700/80 backdrop-blur-sm border border-blue-500/50 rounded-lg hover:from-blue-500/80 hover:to-blue-600/80 hover:border-blue-400/50 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-[1.02] flex items-center gap-3"
+                  >
+                    <span>Test Function Validation</span>
+                    <div className="group relative">
+                      <svg
+                        className="w-4 h-4 text-blue-400 cursor-help"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
+                        <div className="font-semibold mb-1">
+                          Function Validation Test
+                        </div>
+                        <div>
+                          Tests our website's frontend logic using the
+                          insert_simulation_event function. This is the proper
+                          way to add events with full validation and error
+                          handling.
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+
+                  {testResult?.type === "function" && (
+                    <div
+                      className={`text-sm px-4 py-3 rounded-lg font-medium shadow-lg transition-all duration-300 flex items-center gap-2 ${
+                        testResult.status === "success"
+                          ? "bg-green-900/80 text-green-200 border border-green-700/50"
+                          : testResult.status === "error"
+                          ? "bg-red-900/80 text-red-200 border border-red-700/50"
+                          : "bg-yellow-900/80 text-yellow-200 border border-yellow-700/50"
+                      }`}
+                    >
+                      <div
+                        className={`w-2 h-2 rounded-full ${
+                          testResult.status === "success"
+                            ? "bg-green-400"
+                            : testResult.status === "error"
+                            ? "bg-red-400"
+                            : "bg-yellow-400 animate-pulse"
+                        }`}
+                      ></div>
+                      {testResult.message}
+                    </div>
+                  )}
+                </div>
+
+                {/* Direct Insert Test Button */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      setTestResult({
+                        type: "direct",
+                        status: "testing",
+                        message: "Testing direct insert...",
+                      });
+
+                      const { data, error } = await supabase
+                        .from("simulation_events")
+                        .insert({
+                          event_type: "simulation_started",
+                          user_id: currentUser,
+                        });
+
+                      console.log("Direct insert test:", { data, error });
+
+                      if (error) {
+                        console.log(
+                          "Direct insert blocked by RLS:",
+                          error.message
+                        );
+                        setTestResult({
+                          type: "direct",
+                          status: "success",
+                          message:
+                            "✅ RLS Security Working - Direct insert blocked by database policy",
+                        });
+                      } else {
+                        console.log("Direct insert succeeded");
+                        setTestResult({
+                          type: "direct",
+                          status: "error",
+                          message:
+                            "❌ SECURITY ISSUE - Direct insert succeeded (RLS validation failed!)",
+                        });
+                      }
+
+                      // Clear result after 5 seconds
+                      setTimeout(() => setTestResult(null), 5000);
+                    }}
+                    className="px-4 py-3 text-sm font-medium text-red-100 bg-gradient-to-r from-red-600/80 to-red-700/80 backdrop-blur-sm border border-red-500/50 rounded-lg hover:from-red-500/80 hover:to-red-600/80 hover:border-red-400/50 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-[1.02] flex items-center gap-3"
+                  >
+                    <span>Test Direct Insert Security</span>
+                    <div className="group relative">
+                      <svg
+                        className="w-4 h-4 text-red-400 cursor-help"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
+                        <div className="font-semibold mb-1">
+                          Database Security Test
+                        </div>
+                        <div>
+                          Tests if someone tries to bypass our validation by
+                          inserting directly into the database (e.g., using
+                          Postman, direct API calls). Should be blocked by Row
+                          Level Security (RLS) policies.
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+
+                  {testResult?.type === "direct" && (
+                    <div
+                      className={`text-sm px-4 py-3 rounded-lg font-medium shadow-lg transition-all duration-300 flex items-center gap-2 ${
+                        testResult.status === "success"
+                          ? "bg-green-900/80 text-green-200 border border-green-700/50"
+                          : testResult.status === "error"
+                          ? "bg-red-900/80 text-red-200 border border-red-700/50"
+                          : "bg-yellow-900/80 text-yellow-200 border border-yellow-700/50"
+                      }`}
+                    >
+                      <div
+                        className={`w-2 h-2 rounded-full ${
+                          testResult.status === "success"
+                            ? "bg-green-400"
+                            : testResult.status === "error"
+                            ? "bg-red-400"
+                            : "bg-yellow-400 animate-pulse"
+                        }`}
+                      ></div>
+                      {testResult.message}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

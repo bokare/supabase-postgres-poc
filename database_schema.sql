@@ -34,8 +34,22 @@ BEGIN
   CREATE POLICY "Users can view all simulation events" ON simulation_events
     FOR SELECT USING (true);
 
-  CREATE POLICY "Users can insert simulation events" ON simulation_events
-    FOR INSERT WITH CHECK (true);
+  -- Create a policy that enforces validation at the database level
+  -- This prevents direct inserts that would violate business rules
+  CREATE POLICY "Users can insert simulation events with validation" ON simulation_events
+    FOR INSERT WITH CHECK (
+      -- Only allow insert if the latest event is different from the new event type
+      -- This prevents duplicate consecutive events (start->start or stop->stop)
+      NOT EXISTS (
+        SELECT 1 FROM (
+          SELECT event_type 
+          FROM simulation_events 
+          ORDER BY timestamp DESC 
+          LIMIT 1
+        ) latest 
+        WHERE latest.event_type = simulation_events.event_type
+      )
+    );
 END $$;
 
 -- Create a function to validate and insert simulation events (safe to run multiple times)
