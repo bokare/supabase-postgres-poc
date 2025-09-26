@@ -8,6 +8,7 @@ import { ErrorAlert } from "@/components/ErrorAlert";
 import { SimulationTimelineChart } from "@/components/SimulationTimelineChart";
 import { TemperatureChart } from "@/components/TemperatureChart";
 import { TemperatureStats } from "@/components/TemperatureStats";
+import { TestEmailButton } from "@/components/TestEmailButton";
 import { TemperatureEvent } from "@/types/temperature";
 
 type SimulationStatus = "stopped" | "running";
@@ -59,6 +60,22 @@ export default function DashboardPage() {
     status: "testing" | "success" | "error";
     message: string;
   } | null>(null);
+
+  const [emailTestResult, setEmailTestResult] = useState<{
+    success: boolean;
+    message: string;
+    details?: any;
+  } | null>(null);
+
+  // Auto-clear email test result after 10 seconds
+  useEffect(() => {
+    if (emailTestResult) {
+      const timer = setTimeout(() => {
+        setEmailTestResult(null);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [emailTestResult]);
 
   // Function to refresh simulation data
   const refreshSimulationData = useCallback(async () => {
@@ -642,10 +659,50 @@ export default function DashboardPage() {
                   Real-time temperature readings from active simulation
                 </p>
               </div>
-              <div className="text-sm text-gray-500">
-                {temperatureEvents.length} readings
+              <div className="flex items-center space-x-4">
+                <div className="text-sm text-gray-500">
+                  {temperatureEvents.length} readings
+                </div>
+                <TestEmailButton onTestComplete={setEmailTestResult} />
               </div>
             </div>
+
+            {/* Email Test Result */}
+            {emailTestResult && (
+              <div className="mb-4 p-4 rounded-lg border-l-4 bg-gray-800/50">
+                <div className="flex items-center space-x-3">
+                  <div
+                    className={`w-3 h-3 rounded-full ${
+                      emailTestResult.success ? "bg-green-400" : "bg-red-400"
+                    }`}
+                  ></div>
+                  <div className="flex-1">
+                    <p
+                      className={`font-medium ${
+                        emailTestResult.success
+                          ? "text-green-400"
+                          : "text-red-400"
+                      }`}
+                    >
+                      {emailTestResult.message}
+                    </p>
+                    {emailTestResult.details && (
+                      <p className="text-sm text-gray-400 mt-1">
+                        {typeof emailTestResult.details === "string"
+                          ? emailTestResult.details
+                          : JSON.stringify(emailTestResult.details, null, 2)}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setEmailTestResult(null)}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Temperature Statistics */}
             <TemperatureStats events={temperatureEvents} />

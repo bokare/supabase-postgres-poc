@@ -1,210 +1,109 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE",
+  "Access-Control-Max-Age": "86400"
 };
-
-interface CriticalAlertData {
-  temperature: number;
-  simulation_id: string;
-  timestamp: string;
-}
-
-serve(async (req) => {
-  // Handle CORS preflight requests
+serve(async (req)=>{
+  // Handle CORS preflight requests FIRST
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
-  try {
-    const { temperature, simulation_id, timestamp }: CriticalAlertData =
-      await req.json();
-
-    console.log(`🚨 Sending critical temperature alert: ${temperature}°C`);
-
-    // Admin email address
-    const adminEmail = "bokarevk2001@gmail.com";
-
-    // Format timestamp
-    const alertTime = new Date(timestamp).toLocaleString("en-US", {
-      timeZone: "UTC",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
+    return new Response("ok", {
+      headers: corsHeaders,
+      status: 200
     });
-
-    // Email content
-    const subject = `🚨 CRITICAL TEMPERATURE ALERT - ${temperature}°C`;
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Critical Temperature Alert</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }
-          .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-          .header { background: #dc2626; color: white; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; }
-          .content { padding: 30px; }
-          .alert-box { background: #fef2f2; border: 2px solid #fecaca; border-radius: 8px; padding: 20px; margin: 20px 0; }
-          .temperature { font-size: 48px; font-weight: bold; color: #dc2626; text-align: center; margin: 20px 0; }
-          .details { background: #f9fafb; padding: 15px; border-radius: 6px; margin: 15px 0; }
-          .footer { background: #f3f4f6; padding: 15px; text-align: center; border-radius: 0 0 8px 8px; color: #6b7280; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>🚨 CRITICAL TEMPERATURE ALERT</h1>
-            <p>Immediate attention required</p>
-          </div>
-          <div class="content">
-            <div class="alert-box">
-              <h2>Temperature Exceeded Critical Threshold</h2>
-              <div class="temperature">${temperature}°C</div>
-              <p style="text-align: center; color: #dc2626; font-weight: bold;">
-                ⚠️ Temperature is above 90°C - Critical Level Reached
-              </p>
+  }
+  try {
+    const { temperature, simulation_id, timestamp, user_email } = await req.json();
+    console.log(" Critical temperature alert received:", {
+      temperature,
+      simulation_id,
+      timestamp,
+      user_email
+    });
+    // Initialize Supabase client with service role key
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Send email using Supabase's email service
+    const { data: emailData, error: emailError } = await supabase.functions.invoke("send-email", {
+      body: {
+        to: "bokarevk2001@gmail.com",
+        subject: " CRITICAL TEMPERATURE ALERT",
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background: #dc2626; color: white; padding: 20px; text-align: center;">
+                <h1 style="margin: 0; font-size: 24px;"> CRITICAL TEMPERATURE ALERT</h1>
+              </div>
+              
+              <div style="padding: 20px; background: #f9fafb;">
+                <h2 style="color: #dc2626; margin-top: 0;">Temperature Critical: ${temperature}°C</h2>
+                
+                <div style="background: white; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                  <h3 style="margin-top: 0; color: #374151;">Alert Details:</h3>
+                  <ul style="color: #6b7280;">
+                    <li><strong>Temperature:</strong> ${temperature}°C</li>
+                    <li><strong>Status:</strong> CRITICAL</li>
+                    <li><strong>Simulation ID:</strong> ${simulation_id}</li>
+                    <li><strong>Timestamp:</strong> ${new Date(timestamp).toLocaleString()}</li>
+                    <li><strong>User:</strong> ${user_email || "Unknown"}</li>
+                  </ul>
+                </div>
+                
+                <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                  <h3 style="color: #dc2626; margin-top: 0;">⚠️ Immediate Action Required</h3>
+                  <p style="color: #7f1d1d; margin: 0;">
+                    The temperature has exceeded the critical threshold of 90°C. 
+                    Please check the simulation immediately and take appropriate action.
+                  </p>
+                </div>
+                
+                <div style="text-align: center; margin-top: 20px;">
+                  <a href="https://dumudnteqmtvycqdlnbe.supabase.co" 
+                     style="background: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                    View Dashboard
+                  </a>
+                </div>
+              </div>
+              
+              <div style="background: #f3f4f6; padding: 15px; text-align: center; color: #6b7280; font-size: 12px;">
+                <p style="margin: 0;">This is an automated alert from your Temperature Monitoring System</p>
+              </div>
             </div>
-            
-            <div class="details">
-              <h3>Alert Details:</h3>
-              <ul>
-                <li><strong>Temperature:</strong> ${temperature}°C</li>
-                <li><strong>Status:</strong> <span style="color: #dc2626; font-weight: bold;">CRITICAL</span></li>
-                <li><strong>Simulation ID:</strong> ${simulation_id}</li>
-                <li><strong>Alert Time:</strong> ${alertTime} UTC</li>
-                <li><strong>Threshold:</strong> 90°C</li>
-              </ul>
-            </div>
-
-            <div class="details">
-              <h3>Recommended Actions:</h3>
-              <ul>
-                <li>Immediately check the simulation system</li>
-                <li>Verify temperature sensors are functioning correctly</li>
-                <li>Consider stopping the simulation if necessary</li>
-                <li>Monitor the system closely for any further alerts</li>
-              </ul>
-            </div>
-          </div>
-          <div class="footer">
-            <p>This is an automated alert from the Temperature Monitoring System</p>
-            <p>Please acknowledge this alert by checking the dashboard</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    const textContent = `
-CRITICAL TEMPERATURE ALERT
-
-Temperature: ${temperature}°C
-Status: CRITICAL
-Simulation ID: ${simulation_id}
-Alert Time: ${alertTime} UTC
-Threshold: 90°C
-
-This temperature exceeds the critical threshold of 90°C. 
-Please check the simulation system immediately.
-
-Recommended Actions:
-- Check the simulation system
-- Verify temperature sensors
-- Consider stopping simulation if necessary
-- Monitor system closely
-
-This is an automated alert from the Temperature Monitoring System.
-Please acknowledge this alert by checking the dashboard.
-    `;
-
-    // Send email using Supabase's built-in email service
-    // Note: This requires Supabase email service to be configured
-    const emailResponse = await fetch(
-      "https://api.supabase.com/v1/projects/" +
-        Deno.env.get("SUPABASE_PROJECT_ID") +
-        "/emails",
-      {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          to: [adminEmail],
-          subject: subject,
-          html: htmlContent,
-          text: textContent,
-        }),
+          `
       }
-    );
-
-    if (!emailResponse.ok) {
-      const errorText = await emailResponse.text();
-      console.error("❌ Email sending failed:", errorText);
-
-      // Fallback: Log the alert for manual sending
-      console.log("📧 Email content for manual sending:");
-      console.log("To:", adminEmail);
-      console.log("Subject:", subject);
-      console.log("Body:", textContent);
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Email sending failed",
-          details: errorText,
-          fallback: {
-            to: adminEmail,
-            subject: subject,
-            body: textContent,
-          },
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+    });
+    if (emailError) {
+      console.error("❌ Email sending failed:", emailError);
+      throw new Error(`Email sending failed: ${emailError.message}`);
     }
-
-    const emailResult = await emailResponse.json();
-    console.log("✅ Email sent successfully:", emailResult);
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: "Critical temperature alert sent successfully",
-        data: {
-          temperature,
-          simulation_id,
-          timestamp,
-          email_sent: true,
-        },
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    console.log("✅ Email sent successfully:", emailData);
+    return new Response(JSON.stringify({
+      success: true,
+      message: "Critical temperature alert sent successfully",
+      email_id: emailData?.id || "unknown",
+      temperature,
+      simulation_id,
+      timestamp
+    }), {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json"
+      },
+      status: 200
+    });
   } catch (error) {
-    console.error("❌ Error sending critical alert:", error);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: "Failed to send critical alert",
-        details: error.message,
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    console.error("❌ Error in send-critical-alert:", error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message || "Failed to send critical alert"
+    }), {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json"
+      },
+      status: 500
+    });
   }
 });
