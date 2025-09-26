@@ -6,6 +6,9 @@ import { SimulationControl } from "@/components/SimulationControl";
 import { SimulationStatus } from "@/components/SimulationStatus";
 import { ErrorAlert } from "@/components/ErrorAlert";
 import { SimulationTimelineChart } from "@/components/SimulationTimelineChart";
+import { TemperatureChart } from "@/components/TemperatureChart";
+import { TemperatureStats } from "@/components/TemperatureStats";
+import { TemperatureEvent } from "@/types/temperature";
 
 type SimulationStatus = "stopped" | "running";
 
@@ -42,6 +45,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allEvents, setAllEvents] = useState<any[]>([]);
+  const [temperatureEvents, setTemperatureEvents] = useState<TemperatureEvent[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<
     "CONNECTING" | "CONNECTED" | "DISCONNECTED" | "SUBSCRIBED"
   >("DISCONNECTED");
@@ -113,6 +117,28 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const refreshTemperatureData = useCallback(async () => {
+    try {
+      console.log("🌡️ Refreshing temperature data...");
+      
+      // Fetch all temperature events
+      const { data: events, error: eventsError } = await supabase
+        .from("checkup_events")
+        .select("*")
+        .order("timestamp", { ascending: true });
+
+      if (eventsError) {
+        console.error("❌ Error fetching temperature events:", eventsError);
+        return;
+      }
+
+      console.log("🌡️ Fetched temperature events:", events);
+      setTemperatureEvents(events || []);
+    } catch (error) {
+      console.error("❌ Error refreshing temperature data:", error);
+    }
+  }, []);
+
   // Set up real-time subscription
   useEffect(() => {
     if (!currentUser) return;
@@ -141,6 +167,25 @@ export default function DashboardPage() {
           console.log("Simulation data refreshed");
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "checkup_events",
+        },
+        async (payload) => {
+          console.log("Temperature event received:", payload);
+          console.log("Temperature:", payload.new?.temperature);
+          console.log("Status:", payload.new?.status);
+          console.log("Timestamp:", payload.new?.timestamp);
+
+          // Refresh temperature data when new event is inserted
+          console.log("Refreshing temperature data...");
+          await refreshTemperatureData();
+          console.log("Temperature data refreshed");
+        }
+      )
       .subscribe((status) => {
         console.log("Real-time subscription status:", status);
         setConnectionStatus(
@@ -161,6 +206,7 @@ export default function DashboardPage() {
       console.log("Starting fallback polling...");
       const interval = setInterval(() => {
         refreshSimulationData();
+        refreshTemperatureData();
       }, 5000); // Poll every 5 seconds
 
       setPollingInterval(interval);
@@ -198,6 +244,8 @@ export default function DashboardPage() {
 
         // Refresh simulation data
         await refreshSimulationData();
+        // Refresh temperature data
+        await refreshTemperatureData();
       } catch (error) {
         console.error("Error initializing data:", error);
       }
@@ -583,6 +631,37 @@ export default function DashboardPage() {
           <SimulationStatus simulation={simulation} />
 
           <SimulationTimelineChart events={allEvents} />
+
+          {/* Temperature Monitoring Section */}
+          <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700/50 rounded-xl p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-white mb-2 flex items-center">
+                  🌡️ Temperature Monitoring
+                </h2>
+                <p className="text-gray-400">
+                  Real-time temperature readings from active simulation
+                </p>
+              </div>
+              <div className="text-sm text-gray-500">
+                {temperatureEvents.length} readings
+              </div>
+            </div>
+
+            {/* Temperature Statistics */}
+            <TemperatureStats events={temperatureEvents} />
+
+            {/* Temperature Chart */}
+            <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700/30">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white">Temperature Chart</h3>
+                <div className="text-sm text-gray-400">
+                  Last 20 readings • Updates every minute
+                </div>
+              </div>
+              <TemperatureChart events={temperatureEvents} showLastN={20} />
+            </div>
+          </div>
         </div>
       </div>
     </div>
