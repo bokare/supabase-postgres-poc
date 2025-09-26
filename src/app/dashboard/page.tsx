@@ -353,7 +353,6 @@ export default function DashboardPage() {
                 Monitor and control your simulation processes
               </p>
             </div>
-            
 
             {/* Real-time Connection Status */}
             <div className="flex items-center space-x-4">
