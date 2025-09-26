@@ -1,0 +1,60 @@
+name: Temperature Monitoring System
+
+on:
+  schedule:
+    # Run every 5 seconds when simulation is active
+    # Note: GitHub Actions minimum interval is 1 minute, so we'll run every minute
+    # and let the Edge Function handle the 5-second logic
+    - cron: "* * * * *" # Every minute
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  generate-temperature:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Call Temperature Generation Function
+        run: |
+          echo "🌡️ Calling temperature generation function..."
+
+          # Get the Edge Function URL
+          EDGE_FUNCTION_URL="${{ secrets.SUPABASE_URL }}/functions/v1/generate-temperature"
+
+          # Call the Edge Function
+          response=$(curl -s -w "\n%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json" \
+            "$EDGE_FUNCTION_URL")
+
+          # Extract response body and status code
+          http_code=$(echo "$response" | tail -n1)
+          response_body=$(echo "$response" | head -n -1)
+
+          echo "📊 Response Status: $http_code"
+          echo "📋 Response Body: $response_body"
+
+          # Check if the request was successful
+          if [ "$http_code" -eq 200 ]; then
+            echo "✅ Temperature generation completed successfully"
+            
+            # Check if simulation is active
+            if echo "$response_body" | grep -q '"activeSimulation":false'; then
+              echo "⏸️ No active simulation, temperature generation skipped"
+            else
+              echo "🔥 Active simulation detected, temperature generated"
+            fi
+          else
+            echo "❌ Temperature generation failed with status: $http_code"
+            echo "Response: $response_body"
+            exit 1
+          fi
+
+      - name: Log Results
+        if: always()
+        run: |
+          echo "📝 Temperature monitoring job completed at $(date)"
+          echo "🕐 Next run will be in 1 minute"

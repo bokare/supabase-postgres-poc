@@ -160,3 +160,187 @@ BEGIN
     GRANT EXECUTE ON FUNCTION insert_simulation_event(TEXT, TEXT) TO anon;
   END IF;
 END $$;
+
+-- =============================================
+-- TEMPERATURE MONITORING SYSTEM
+-- =============================================
+
+-- Create checkup_events table for temperature monitoring (safe to run multiple times)
+CREATE TABLE IF NOT EXISTS checkup_events (
+  checkup_id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  temperature INTEGER NOT NULL CHECK (temperature >= 0 AND temperature <= 100),
+  status TEXT NOT NULL CHECK (status IN ('normal', 'critical')),
+  simulation_id TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes for better performance (safe to run multiple times)
+CREATE INDEX IF NOT EXISTS idx_checkup_events_timestamp ON checkup_events(timestamp);
+CREATE INDEX IF NOT EXISTS idx_checkup_events_status ON checkup_events(status);
+CREATE INDEX IF NOT EXISTS idx_checkup_events_simulation_id ON checkup_events(simulation_id);
+CREATE INDEX IF NOT EXISTS idx_checkup_events_temperature ON checkup_events(temperature);
+
+-- Enable Row Level Security (RLS) for checkup_events table (safe to run multiple times)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_class 
+    WHERE relname = 'checkup_events' 
+    AND relrowsecurity = true
+  ) THEN
+    ALTER TABLE checkup_events ENABLE ROW LEVEL SECURITY;
+  END IF;
+END $$;
+
+-- Create RLS policies for checkup_events table (safe to run multiple times)
+DO $$
+BEGIN
+  -- Drop existing policies if they exist
+  DROP POLICY IF EXISTS "Users can view all checkup events" ON checkup_events;
+  DROP POLICY IF EXISTS "System can insert checkup events" ON checkup_events;
+  
+  -- Create policies
+  CREATE POLICY "Users can view all checkup events" ON checkup_events
+    FOR SELECT USING (true);
+
+  -- Allow system to insert checkup events (for Edge Functions)
+  CREATE POLICY "System can insert checkup events" ON checkup_events
+    FOR INSERT WITH CHECK (true);
+END $$;
+
+-- Create function to insert checkup events with validation (safe to run multiple times)
+CREATE OR REPLACE FUNCTION insert_checkup_event(
+  p_temperature INTEGER,
+  p_simulation_id TEXT
+)
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  event_status TEXT;
+  result JSON;
+BEGIN
+  -- Validate input parameters
+  IF p_temperature < 0 OR p_temperature > 100 THEN
+    result := json_build_object(
+      'success', false,
+      'error', 'Temperature must be between 0 and 100'
+    );
+    RETURN result;
+  END IF;
+
+  IF p_simulation_id IS NULL OR p_simulation_id = '' THEN
+    result := json_build_object(
+      'success', false,
+      'error', 'Simulation ID cannot be null or empty'
+    );
+    RETURN result;
+  END IF;
+
+  -- Determine status based on temperature
+  IF p_temperature >= 90 THEN
+    event_status := 'critical';
+  ELSE
+    event_status := 'normal';
+  END IF;
+
+  -- Insert the checkup event
+  INSERT INTO checkup_events (temperature, status, simulation_id)
+  VALUES (p_temperature, event_status, p_simulation_id);
+  
+  -- Debug: Log successful insertion
+  RAISE NOTICE 'Checkup event inserted: temp=%, status=%, sim_id=%', 
+    p_temperature, event_status, p_simulation_id;
+
+  -- Return success response
+  result := json_build_object(
+    'success', true,
+    'message', 'Checkup event logged successfully',
+    'temperature', p_temperature,
+    'status', event_status,
+    'simulation_id', p_simulation_id,
+    'timestamp', NOW()
+  );
+
+  RETURN result;
+END;
+$$;
+
+-- Create function to get active simulation ID (safe to run multiple times)
+CREATE OR REPLACE FUNCTION get_active_simulation_id()
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  active_sim_id TEXT;
+BEGIN
+  -- Get the latest simulation event
+  SELECT user_id INTO active_sim_id
+  FROM simulation_events
+  WHERE event_type = 'simulation_started'
+  ORDER BY timestamp DESC
+  LIMIT 1;
+
+  -- Check if simulation is still running (no stop event after the start)
+  IF active_sim_id IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1 FROM simulation_events
+      WHERE event_type = 'simulation_stopped'
+      AND user_id = active_sim_id
+      AND timestamp > (
+        SELECT timestamp FROM simulation_events
+        WHERE event_type = 'simulation_started'
+        AND user_id = active_sim_id
+        ORDER BY timestamp DESC
+        LIMIT 1
+      )
+    ) THEN
+      -- Simulation has been stopped
+      active_sim_id := NULL;
+    END IF;
+  END IF;
+
+  RETURN active_sim_id;
+END;
+$$;
+
+-- Grant execute permissions on the functions (safe to run multiple times)
+DO $$
+BEGIN
+  -- Grant permissions for insert_checkup_event
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.routine_privileges 
+    WHERE routine_name = 'insert_checkup_event' 
+    AND grantee = 'authenticated'
+  ) THEN
+    GRANT EXECUTE ON FUNCTION insert_checkup_event(INTEGER, TEXT) TO authenticated;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.routine_privileges 
+    WHERE routine_name = 'insert_checkup_event' 
+    AND grantee = 'anon'
+  ) THEN
+    GRANT EXECUTE ON FUNCTION insert_checkup_event(INTEGER, TEXT) TO anon;
+  END IF;
+
+  -- Grant permissions for get_active_simulation_id
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.routine_privileges 
+    WHERE routine_name = 'get_active_simulation_id' 
+    AND grantee = 'authenticated'
+  ) THEN
+    GRANT EXECUTE ON FUNCTION get_active_simulation_id() TO authenticated;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.routine_privileges 
+    WHERE routine_name = 'get_active_simulation_id' 
+    AND grantee = 'anon'
+  ) THEN
+    GRANT EXECUTE ON FUNCTION get_active_simulation_id() TO anon;
+  END IF;
+END $$;
