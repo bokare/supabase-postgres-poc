@@ -45,7 +45,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allEvents, setAllEvents] = useState<any[]>([]);
-  const [temperatureEvents, setTemperatureEvents] = useState<TemperatureEvent[]>([]);
+  const [temperatureEvents, setTemperatureEvents] = useState<
+    TemperatureEvent[]
+  >([]);
   const [connectionStatus, setConnectionStatus] = useState<
     "CONNECTING" | "CONNECTED" | "DISCONNECTED" | "SUBSCRIBED"
   >("DISCONNECTED");
@@ -120,7 +122,7 @@ export default function DashboardPage() {
   const refreshTemperatureData = useCallback(async () => {
     try {
       console.log("🌡️ Refreshing temperature data...");
-      
+
       // Fetch all temperature events
       const { data: events, error: eventsError } = await supabase
         .from("checkup_events")
@@ -351,6 +353,7 @@ export default function DashboardPage() {
                 Monitor and control your simulation processes
               </p>
             </div>
+            
 
             {/* Real-time Connection Status */}
             <div className="flex items-center space-x-4">
@@ -654,7 +657,9 @@ export default function DashboardPage() {
             {/* Temperature Chart */}
             <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700/30">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">Temperature Chart</h3>
+                <h3 className="text-lg font-semibold text-white">
+                  Temperature Chart
+                </h3>
                 <div className="text-sm text-gray-400">
                   Last 20 readings • Updates every minute
                 </div>
