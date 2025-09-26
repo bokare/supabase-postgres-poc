@@ -373,8 +373,6 @@ export default function DashboardPage() {
                   {connectionStatus === "DISCONNECTED" && "Disconnected"}
                 </span>
               </div>
-
-              {/* Debug buttons */}
             </div>
           </div>
 
