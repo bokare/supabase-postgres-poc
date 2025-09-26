@@ -275,32 +275,29 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
+  latest_event RECORD;
   active_sim_id TEXT;
 BEGIN
-  -- Get the latest simulation event
-  SELECT user_id INTO active_sim_id
+  -- Get the latest simulation event (regardless of type)
+  SELECT event_type, user_id, timestamp INTO latest_event
   FROM simulation_events
-  WHERE event_type = 'simulation_started'
   ORDER BY timestamp DESC
   LIMIT 1;
 
-  -- Check if simulation is still running (no stop event after the start)
-  IF active_sim_id IS NOT NULL THEN
-    IF EXISTS (
-      SELECT 1 FROM simulation_events
-      WHERE event_type = 'simulation_stopped'
-      AND user_id = active_sim_id
-      AND timestamp > (
-        SELECT timestamp FROM simulation_events
-        WHERE event_type = 'simulation_started'
-        AND user_id = active_sim_id
-        ORDER BY timestamp DESC
-        LIMIT 1
-      )
-    ) THEN
-      -- Simulation has been stopped
-      active_sim_id := NULL;
-    END IF;
+  -- Check if there are any events at all
+  IF latest_event.event_type IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  -- If the latest event is a start event, simulation is running
+  IF latest_event.event_type = 'simulation_started' THEN
+    active_sim_id := latest_event.user_id;
+  -- If the latest event is a stop event, simulation is stopped
+  ELSIF latest_event.event_type = 'simulation_stopped' THEN
+    active_sim_id := NULL;
+  -- Fallback (shouldn't happen with our constraints)
+  ELSE
+    active_sim_id := NULL;
   END IF;
 
   RETURN active_sim_id;
